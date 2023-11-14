@@ -110,7 +110,7 @@ jobs:
     - name: Get image digest
       id: image-digest
       run: |
-        echo "DIGEST=$(docker images $IMAGE:$TAG --no-trunc | awk '{print $3}' | tail -n +2)" > "$GITHUB_OUTPUT"
+        echo "DIGEST=$(docker images $IMAGE:$TAG --no-trunc --digests | awk '{print $3}' | tail -n +2)" >> "$GITHUB_OUTPUT"
 
     - name: Sign image with a key
       run: |
