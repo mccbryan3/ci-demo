@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: bad-pod
+  name: bad-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: bad-pod
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        run: bad-pod
+    spec:
+      imagePullSecrets:
+      - name: mccbryan-dockerhub
+      containers:
+      - image: mccbryan/setestimage:6
+        name: bad-pod
+status: {}
