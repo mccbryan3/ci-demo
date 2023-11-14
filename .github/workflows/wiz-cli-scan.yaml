@@ -110,14 +110,12 @@ jobs:
     - name: Get image digest
       id: image-digest
       run: |
-        docker images --digests
-        docker images $IMAGE:$TAG --no-trunc --digests | awk '{print $3}' | tail -n +2
-        echo "DIGEST=$(docker images $IMAGE:$TAG --no-trunc --digests | awk '{print $3}' | tail -n +2)" >> "$GITHUB_OUTPUT"
+        echo "DIGEST=$(docker inspect "$IMAGE:$TAG" --format='{{index .RepoDigests 0}}')" >> "$GITHUB_OUTPUT"
 
     - name: Sign image with a key
       run: |
-        echo "signing image $IMAGE@$DIGEST"
-        cosign sign --yes --key env://COSIGN_KEY "$IMAGE@$DIGEST"
+        echo "signing image $DIGEST"
+        cosign sign --yes --key env://COSIGN_KEY "$DIGEST"
       env:
         TAGS: $TAG
         COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
