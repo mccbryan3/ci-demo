@@ -1,0 +1,179 @@
+name: 'wiz-cli-ci-scan'
+on: 
+  pull_request:
+    branches: 
+    - main
+    
+jobs:
+  wiz-cli-container-scan:
+    if: contains(github.event.pull_request.head.ref, 'container')
+    name: 'Wiz-cli Dockerfile and Container Scan'
+    runs-on: ubuntu-latest
+    env:
+      # Set the relative path in the repo to scan
+      SCAN_PATH_PASS: "container-pass"
+      SCAN_PATH_FAIL: "container-fail"
+      IMAGE: mccbryan/setestimage
+      TAG: ${{github.run_number}}
+      IAC_POLICY: "block-iac-fail-medium" # Set the desired Wiz-cli policy to use
+      VULN_POLICIES: "vuln-one-medium"
+      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+      GH_USER: ${{ secrets.GH_USER }}
+      GH_PASS: ${{ secrets.GH_PASS }}
+      #WIZ_ENV: ${{ secrets.WIZ_ENV }}
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Check out repository
+      uses: actions/checkout@v2
+
+    - name: Docker Login
+      uses: docker/login-action@v3.0.0
+      with:
+        username: ${{ env.GH_USER }}
+        password: ${{ env.GH_PASS }}
+    
+    - name: Set path based on pass branch
+      run: echo "SCAN_PATH=$SCAN_PATH_PASS" >> $GITHUB_ENV
+      if: contains(github.event.pull_request.head.ref, 'container-pass')
+    
+    - name: Set path based on fail branch
+      run: echo "SCAN_PATH=$SCAN_PATH_FAIL" >> $GITHUB_ENV
+      if: contains(github.event.pull_request.head.ref, 'container-fail')
+
+    - name: Download Wiz-cli
+      run: |
+        curl -Lo wizcli https://wizcli.app.wiz.io/latest/wizcli-linux-amd64 && chmod +x wizcli
+        ./wizcli version
+
+    - name: Authenticate to Wiz
+      run: ./wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
+    
+    - name: Run wiz-cli Dir scan
+      run: |
+        ./wizcli dir scan --path ${{ env.SCAN_PATH }}  --output wiz-dir-scan-results.json,sarif,true
+    
+    - name: Output sarif file for Dir scan
+      run: |
+        cat wiz-dir-scan-results.json
+    
+    - uses: github/codeql-action/upload-sarif@v2
+      with:
+        category: directory-scans
+        sarif_file: wiz-dir-scan-results.json
+      continue-on-error: true
+      if: always()
+      
+    - name: Run wiz-cli IaC scan
+      run: |
+        ./wizcli iac scan --path ${{ env.SCAN_PATH }} --policy "$IAC_POLICY" --output wiz-iac-scan-results.json,sarif,true --policy-hits-only
+    
+    - uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: wiz-iac-scan-results.json
+      continue-on-error: true
+      if: always()
+
+    - name: Build the Docker image
+      run: |
+        docker build ${{ env.SCAN_PATH }} -t $IMAGE:$TAG
+      if: always()
+    
+    - name: Run wiz-cli Docker scan
+      run: |
+        ./wizcli docker scan --image $IMAGE:$TAG --policy "$VULN_POLICIES" --policy-hits-only --dockerfile ${{ env.SCAN_PATH }}/Dockerfile --output wiz-image-scan-results.json,sarif,true
+
+    - uses: github/codeql-action/upload-sarif@v2
+      with:
+        category: docker-scans
+        sarif_file: wiz-image-scan-results.json
+      continue-on-error: true
+      if: always()
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3.1.1
+      with:
+        cosign-release: 'v2.2.0'
+
+    - name: Push docker image
+      id: push-image
+      run: |
+        docker push $IMAGE:$TAG
+        echo "Pushing image here"
+
+    - name: Get image digest
+      id: image-digest
+      run: |
+        echo "DIGEST=$(docker images $IMAGE:$TAG --no-trunc | awk '{print $3}' | tail -n +2)" >> "$GITHUB_OUTPUT"
+
+    - name: Sign image with a key
+      run: |
+        cosign sign --yes --key env://COSIGN_KEY "$IMAGE@$DIGEST"
+      env:
+        TAGS: $TAG
+        COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        DIGEST: ${{ steps.image-digest.outputs.DIGEST }}
+
+    - name: Run wiz-cli Docker tag
+      run: |
+        docker images list
+        docker images --digests
+        ./wizcli docker tag --image $IMAGE:$TAG
+    
+  wiz-cli-iac-scan:
+    if: contains(github.event.pull_request.head.ref, 'iac')
+    name: 'Wiz-cli IaC Scan'
+    runs-on: ubuntu-latest
+    env:
+      # Set the relative path in the repo to scan
+      SCAN_PATH_PASS: "aws/terraform-eks-pass"
+      SCAN_PATH_FAIL: "aws/terraform-eks-fail"
+      IAC_POLICY: "iac-fail-medium" # Set the desired Wiz-cli policy to use
+      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+      #WIZ_ENV: ${{ secrets.WIZ_ENV }}
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Check out repository
+      uses: actions/checkout@v2
+
+    - name: Set path based on pass branch
+      run: echo "SCAN_PATH=$SCAN_PATH_PASS" >> $GITHUB_ENV
+      if: contains(github.event.pull_request.head.ref, 'iac-pass')
+      
+    - name: Set path based on fail branch
+      run: echo "SCAN_PATH=$SCAN_PATH_FAIL" >> $GITHUB_ENV
+      if: contains(github.event.pull_request.head.ref, 'iac-fail')
+      
+    - name: Download Wiz-cli
+      run: curl -o wizcli https://wizcli.app.wiz.io/wizcli && chmod +x wizcli
+
+    - name: Authenticate to Wiz
+      run: ./wizcli auth --id "$WIZ_CLIENT_ID" --secret "$WIZ_CLIENT_SECRET"
+
+    - name: Run wiz-cli IaC scan
+      run: |
+        ./wizcli iac scan --path ${{ env.SCAN_PATH }} --policy "$IAC_POLICY" --policy-hits-only --output wiz-iac-scan-results.json,sarif,true
+        
+    - uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: wiz-iac-scan-results.json
+      continue-on-error: true
+      if: always()
+    
+    - name: Apply Infrastructure as Code
+      run: |
+        echo "applying iac templates"
