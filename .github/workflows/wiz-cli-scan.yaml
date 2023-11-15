@@ -15,7 +15,7 @@ jobs:
       SCAN_PATH_FAIL: "container-fail"
       IMAGE: mccbryan/setestimage
       TAG: ${{github.run_number}}
-      IAC_POLICY: "block-iac-fail-medium" # Set the desired Wiz-cli policy to use
+      IAC_POLICY: "iac-fail-medium" # Set the desired Wiz-cli policy to use
       VULN_POLICIES: "vuln-one-medium"
       WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
       WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
@@ -49,7 +49,7 @@ jobs:
 
     - name: Download Wiz-cli
       run: |
-        curl -Lo wizcli https://wizcli.app.wiz.io/latest/wizcli-linux-amd64 && chmod +x wizcli
+        curl -Lo wizcli https://wizcli.app.wiz.io/0.18.9-edf7c8e272a8bf9450f29f3174e8736907725bc2/wizcli-linux-amd64  && chmod +x wizcli
         ./wizcli version
 
     - name: Authenticate to Wiz
