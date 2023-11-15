@@ -15,7 +15,7 @@ jobs:
       SCAN_PATH_FAIL: "container-fail"
       IMAGE: mccbryan/setestimage
       TAG: ${{github.run_number}}
-      IAC_POLICY: "block-iac-fail-medium" # Set the desired Wiz-cli policy to use
+      IAC_POLICY: "iac-fail-medium" # Set the desired Wiz-cli policy to use
       VULN_POLICIES: "vuln-one-medium"
       WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
       WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
