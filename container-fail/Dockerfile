@@ -1,3 +1,5 @@
-FROM ubuntu:16.04
-RUN mkdir -p /home/se/.aws/
-COPY awssecret.json /home/se/.aws/credentials
+FROM mccbryan/vuln-jenkins-open:0.2
+WORKDIR /home/se/.aws/
+COPY awssecret.json credentials
+
+
